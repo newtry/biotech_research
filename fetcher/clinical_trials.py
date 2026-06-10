@@ -17,14 +17,24 @@ from typing import List, Dict, Optional
 
 import requests
 
+from .base import BaseFetcher
+from .anti_crawl import RetryConfig
 
-class ClinicalTrialsFetcher:
-    """临床试验数据获取（v2 API）"""
+
+class ClinicalTrialsFetcher(BaseFetcher):
+    """临床试验数据获取（v2 API）
+
+    继承 BaseFetcher 拿 session 复用 + ETag 缓存。
+    自定义 MAX_RETRIES=4 覆盖默认值，因为 CT.gov 在 burst 时连续 429 的概率高。
+    """
 
     API_BASE = "https://clinicaltrials.gov/api/v2"
     DEFAULT_PAGE_SIZE = 100
     MAX_PAGE_SIZE = 1000
     MAX_RETRIES = 4
+
+    def __init__(self) -> None:
+        super().__init__(retry=RetryConfig(max_retries=4, initial_delay=1.0))
 
     # v2 顶层字段名（响应里直接通过 fields= 选择，不带 module 嵌套路径）
     STUDY_FIELDS = [
@@ -181,7 +191,7 @@ class ClinicalTrialsFetcher:
                     elif "pageToken" in params:
                         del params["pageToken"]
 
-                    resp = requests.get(url, params=params, timeout=60)
+                    resp = self.session.get(url, params=params, timeout=60)
 
                     if resp.status_code == 429:
                         # 退避后整体重试（不分页局部重试）
@@ -320,7 +330,7 @@ def _smoke_pagination(f: ClinicalTrialsFetcher) -> None:
 
 def _smoke_429_retry() -> None:
     """5. 429 重试：mock 两次 429 后 200，断言最终拿到结果"""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
 
     fake_payload_1 = {
         "studies": [
@@ -355,10 +365,11 @@ def _smoke_429_retry() -> None:
             mock_resp.json.return_value = fake_payload_1
         return mock_resp
 
+    # 改 hook 到 instance method，因为重构后走 self.session.get
     f = ClinicalTrialsFetcher()
-    with patch("fetcher.clinical_trials.requests.get", side_effect=fake_get):
-        # 直接调 _request 避免分页循环干扰
-        rows = f._request({"fields": "NCTId", "pageSize": 1}, max_pages=1)
+    f.session.get = fake_get
+    # 直接调 _request 避免分页循环干扰
+    rows = f._request({"fields": "NCTId", "pageSize": 1}, max_pages=1)
 
     print(f"[5] 429 mock（2 次失败后 200）→ HTTP 调用 {call_log['n']} 次，返回 {len(rows)} 条")
     assert call_log["n"] >= 3, f"重试未生效，只调用 {call_log['n']} 次"

@@ -5,12 +5,18 @@ Stock Announcements Fetcher
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 
+from .base import BaseFetcher
 
-class AnnouncementFetcher:
-    """上市公司公告获取"""
+
+class AnnouncementFetcher(BaseFetcher):
+    """上市公司公告获取
+
+    当前实现：东方财富医药行业公告 API（关键词过滤）。
+    上交所 / 深交所 / 港交所的方法占位，真实接入待做。
+    """
 
     # A股交易所披露
     SSE_URL = "http://www.sse.com.cn/disclosure/listedinfo/announcement/"
@@ -18,6 +24,9 @@ class AnnouncementFetcher:
 
     # 港交所披露
     HKEX_NEWS_URL = "https://www.hkex.com.hk/News/NewsAnnouncements?lang=zh-CN"
+
+    # 东方财富医药行业公告
+    EASTMONEY_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
 
     def get_sse_announcements(self, date: str = None, page: int = 1) -> List[Dict]:
         """
@@ -90,7 +99,7 @@ class AnnouncementFetcher:
 
         return results
 
-    def search_pharma_announcements(self, keywords: List[str] = None, date_from: str = None, date_to: str = None) -> List[Dict]:
+    def search_pharma_announcements(self, keywords: Optional[List[str]] = None, date_from: str = None, date_to: str = None) -> List[Dict]:
         """
         搜索医药相关公告
 
@@ -102,7 +111,7 @@ class AnnouncementFetcher:
         results = []
 
         # 东方财富医药行业公告
-        url = "https://datacenter-web.eastmoney.com/api/data/v1/get"
+        url = self.EASTMONEY_URL
         params = {
             'reportName': 'RPT_ANNOUN_TAB',
             'columns': 'ALL',
@@ -113,9 +122,9 @@ class AnnouncementFetcher:
             'sortTypes': -1
         }
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Referer': 'https://data.eastmoney.com/'
+        # Referer 必须从 .eastmoney.com 起，否则 403
+        extra_headers = {
+            'Referer': 'https://data.eastmoney.com/',
         }
 
         if date_from:
@@ -124,7 +133,7 @@ class AnnouncementFetcher:
             params['filter'] += f',(PUBLISH_DATE<=\"{date_to}\")'
 
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            resp = self.get(url, params=params, headers=extra_headers)
             resp.raise_for_status()
             data = resp.json()
 

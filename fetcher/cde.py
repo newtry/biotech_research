@@ -5,14 +5,30 @@ CDE / NMPA Drug Approvals Fetcher
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 
+from .base import BaseFetcher
 
-class CDEFetcher:
-    """CDE/NMPA 审批数据获取"""
+
+class CDEFetcher(BaseFetcher):
+    """CDE/NMPA 审批数据获取
+
+    L2 中等强度：带 Origin / Referer / X-Requested-With，模拟浏览器 fetch 调用。
+    L3 重度：BaseFetcher._fetch_via_browser 会在反爬时降级到 Playwright
+            （lazy import，缺包不崩）。
+    """
 
     CDE_API = "https://www.cde.org.cn"
+
+    def _cde_headers(self) -> Dict[str, str]:
+        """L2 headers：模拟 fetch 调用"""
+        return {
+            "Content-Type": "application/json",
+            "Origin": self.CDE_API,
+            "Referer": f"{self.CDE_API}/main/xxgk/firstpage/listpage/zdyz",
+            "X-Requested-With": "XMLHttpRequest",
+        }
 
     def get_drug_approval(self, page: int = 1) -> List[Dict]:
         """
@@ -21,13 +37,8 @@ class CDEFetcher:
         """
         results = []
 
-        # CDE 优先审评公示
         url = f"{self.CDE_API}/centerDrug/getDrugReform"
-        headers = {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        }
-        data = {
+        payload = {
             "pageNum": page,
             "pageSize": 20,
             "releaseTimeStart": "",
@@ -37,7 +48,7 @@ class CDEFetcher:
         }
 
         try:
-            resp = requests.post(url, json=data, headers=headers, timeout=30)
+            resp = self.post(url, json=payload, headers=self._cde_headers())
             resp.raise_for_status()
             result = resp.json()
 
@@ -57,17 +68,13 @@ class CDEFetcher:
 
         return results
 
-    def get_clinical_trials(self, drug_name: str = None) -> List[Dict]:
+    def get_clinical_trials(self, drug_name: Optional[str] = None) -> List[Dict]:
         """
         获取临床试验默示许可
         """
         results = []
         url = f"{self.CDE_API}/centerCT/getCTList"
-        headers = {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        }
-        data = {
+        payload = {
             "pageNum": 1,
             "pageSize": 20,
             "drugName": drug_name or '',
@@ -75,7 +82,7 @@ class CDEFetcher:
         }
 
         try:
-            resp = requests.post(url, json=data, headers=headers, timeout=30)
+            resp = self.post(url, json=payload, headers=self._cde_headers())
             resp.raise_for_status()
             result = resp.json()
 

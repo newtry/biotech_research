@@ -17,9 +17,15 @@ import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
+from .base import BaseFetcher
 
-class FDAFetcher:
-    """FDA 审批数据获取（openFDA drugsfda）"""
+
+class FDAFetcher(BaseFetcher):
+    """FDA 审批数据获取（openFDA drugsfda）
+
+    继承 BaseFetcher：openFDA 是公开 API 无反爬，但 session 复用和
+    拟人化 header 仍能降低被风控的概率（240 req/min/IP）。
+    """
 
     BASE_URL = "https://api.fda.gov/drug/drugsfda.json"
     DEFAULT_PAGE_SIZE = 1000
@@ -91,7 +97,8 @@ class FDAFetcher:
         for _ in range(self.MAX_PAGES):
             params["skip"] = skip
             try:
-                resp = requests.get(self.BASE_URL, params=params, timeout=30)
+                # BaseFetcher._request 已统一处理 429/5xx 重试 + 反爬检测
+                resp = self.get(self.BASE_URL, params=params)
                 if resp.status_code == 404:
                     break  # 越界
                 resp.raise_for_status()

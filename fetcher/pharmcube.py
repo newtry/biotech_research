@@ -1,6 +1,9 @@
 """
 Pharmcube / Pharma Data Fetcher
 从医药魔方等平台获取靶点热度和投融资数据
+
+L4 兜底（参见 TECH_SPEC.md §6.1）：需付费 token，未实现。
+待 Token 申请后接入 BaseFetcher 即可统一 L1 反爬策略。
 """
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +12,7 @@ from typing import List, Dict
 
 
 class PharmcubeFetcher:
-    """医药魔方数据获取"""
+    """医药魔方数据获取（L4 占位）"""
 
     def get_target_trends(self, target: str = None) -> List[Dict]:
         """
